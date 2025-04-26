@@ -9,6 +9,10 @@ import sys
 import vtk
 from vtk.util import numpy_support
 
+# Evolve an implicitly defined surface to minimize the mean of the
+# square of the mean curvature, mean(H^2). The surface is defined
+# (periodically) by a finite Fourier series where the coefficients of the
+# are changed to try to reduce mean(H^2) using gradient descent.
 def main(argc,argv):
   # Device setup
   device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -59,11 +63,8 @@ def main(argc,argv):
 
   verts, faces = extract_surface(surface, device, resolution=grid_resolution)
 
-  save_surface_as_stl(verts, faces, filename=f"surface_step{step}.stl")
   export_scalar_fields_to_vti(surface, device, grid_resolution, filename=f"fields{step}.vti")
   export_sample_points_with_scalar(xyz, sample_energy, filename=f"sample_points{step}.vtp")
-
-  save_surface_as_stl(verts, faces, filename=f"surface_step{step}.stl")
 
   old_energy_value = energy.item()
 
@@ -108,23 +109,27 @@ def main(argc,argv):
       save_coefficients_txt(surface, filename=f"coeffs{step}.txt")
 
       verts, faces = extract_surface(surface, device, resolution=grid_resolution)
-
-      save_surface_as_stl(verts, faces, filename=f"surface_step{step}.stl")
       export_scalar_fields_to_vti(surface, device, grid_resolution, filename=f"fields{step}.vti")
 
       export_sample_points_with_scalar(xyz, sample_energy, filename=f"sample_points{step}.vtp")
 
       old_energy_value = energy_value
 
-  save_surface_as_stl(verts, faces, filename=f"surface_step{step}.stl")
+    save_coefficients_txt(surface, filename=f"coeffs{step}.txt")
+
+    verts, faces = extract_surface(surface, device, resolution=grid_resolution)
+    export_scalar_fields_to_vti(surface, device, grid_resolution, filename=f"fields{step}.vti")
+
+    export_sample_points_with_scalar(xyz, sample_energy, filename=f"sample_points{step}.vtp")
+
   export_scalar_fields_to_vti(surface, device, grid_resolution, filename=f"fields{step}.vti")
-  save_surface_as_stl(verts, faces, filename=f"surface_step{step}.stl")
 
 def save_coefficients_txt(surface_model, filename="coeffs.txt"):
   coeffs = surface_model.coeffs.detach().cpu().numpy()
   np.savetxt(filename, coeffs.reshape(-1), header=f"{coeffs.shape}", comments="")
 
 
+# Output numeric fields to the VTI format used by VisIt
 def export_scalar_fields_to_vti(f_model, device, resolution=64, filename="fields.vti"):
   # Create a regular grid
   x = np.linspace(0, 1, resolution)
@@ -174,26 +179,8 @@ def export_scalar_fields_to_vti(f_model, device, resolution=64, filename="fields
   writer.SetInputData(image)
   writer.Write()
 
-# Fourier-based implicit surface model
-#class FourierSurface(nn.Module):
-#    def __init__(self, order):
-#        super().__init__()
-#        self.order = order
-#        self.coeffs = nn.Parameter(torch.randn((order, order, order), device=device) * 0.1)
-#
-#    def forward(self, xyz):
-#        x, y, z = xyz[:, 0], xyz[:, 1], xyz[:, 2]
-#        f = torch.zeros_like(x)
-#        for i in range(self.order):
-#            for j in range(self.order):
-#                for k in range(self.order):
-#                    a = self.coeffs[i, j, k]
-#                    f += a * torch.sin(2 * np.pi * (i+1) * x) * \
-#                             torch.sin(2 * np.pi * (j+1) * y) * \
-#                             torch.sin(2 * np.pi * (k+1) * z)
-#        return f
 
-
+# A class to define and evaluate a finite Fourier series in 3D
 class FourierSurface(nn.Module):
   def __init__(self, order, coeffs=None):
     super().__init__()
@@ -248,13 +235,14 @@ def visualize_surface(verts, faces):
   plotter.show()
 
 
+# Convert vertices and faces into a PyVista mesh and save as STL
 def save_surface_as_stl(verts, faces, filename="surface.stl"):
-  # Convert vertices and faces into a PyVista mesh and save as STL
   faces_stl = np.hstack([np.full((faces.shape[0], 1), 3), faces]).astype(np.int32)
   mesh = pv.PolyData(verts, faces_stl)
   mesh.save(filename)
 
 
+# Output scalar data on a set of points in 3D to the VTP format used by VisIt
 def export_sample_points_with_scalar(xyz, scalar, filename="sample_points.vtp"):
     import vtk
     from vtk.util import numpy_support
@@ -282,6 +270,7 @@ def export_sample_points_with_scalar(xyz, scalar, filename="sample_points.vtp"):
     writer.Write()
 
 
+# Use a function "main()" defined at the top of the file
 if __name__ == "__main__":
   argv = sys.argv
   argc = len(argv)
