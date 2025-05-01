@@ -8,6 +8,8 @@ import pyvista as pv
 import sys
 import vtk
 from vtk.util import numpy_support
+import json
+import random
 
 # Evolve an implicitly defined surface to minimize the mean of the
 # square of the mean curvature, mean(H^2). The surface is defined
@@ -124,6 +126,8 @@ def main(argc,argv):
 
   export_scalar_fields_to_vti(surface, device, grid_resolution, filename=f"fields{step}.vti")
 
+
+# Output the Fourier coefficients
 def save_coefficients_txt(surface_model, filename="coeffs.txt"):
   coeffs = surface_model.coeffs.detach().cpu().numpy()
   np.savetxt(filename, coeffs.reshape(-1), header=f"{coeffs.shape}", comments="")
