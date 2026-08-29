@@ -5,6 +5,7 @@ import os
 import torch
 import random
 from datetime import datetime
+import time
 
 from experiment_manager import ExperimentManager
 from io_utils        import save_parameters, load_parameters
@@ -28,18 +29,20 @@ def main(argc, argv):
   else:
     folder = mgr.get_next_run_folder()
     params = {
-      "n_samples":10000,
+      "n_samples":40000,
       "fourier_order":3,
       "grid_resolution":64,
       "training_steps":100000,
       "output_every":100,
-      "visualize_thres":0.95,
+      "visualize_thres":0.99,
       "exp_sd":0.01,
       "lr":1e-2
     }
     save_parameters(params, os.path.join(folder,"params.txt"))
     surface = FourierSurface(params["fourier_order"]).to(device)
     start = 0
+
+  torch.manual_seed(int(time.time()))
 
   xyz = torch.rand(params["n_samples"],3,device=device,requires_grad=True)
   opt = torch.optim.Adam(surface.parameters(),lr=params["lr"])
@@ -74,7 +77,7 @@ def main(argc, argv):
 
     ratio = ev/old_e
     if ratio<=params["visualize_thres"] or ratio>=1/params["visualize_thres"]:
-      print(f"\nSaving at step {step}  ({old_e:.4f}->{ev:.4f})")
+      print(f"Saving at step {step}  ({old_e:.4f}->{ev:.4f})")
       mgr.save_coefficients(surface, folder, step)
       mgr.save_energy(folder, ev, step)
       export_scalar_fields_to_vti(surface, device,
